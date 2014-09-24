@@ -426,15 +426,31 @@ def create_new_project(wiki, title, author)
 def project_details(date="")#handles both getting current and historical version of project
 def update_project(wiki="", title="",author="") #handles POSTing new data to project. EACH DB will have its own functions within it to handle what happens when someone adds a new version of project. In postgres, insert wiki=asdf, projectid=x into osf_timelines will lead to a trigger than will make this inserted update-to-the-project have an appropriate version number.
      
-t1)when someone creates a new project, you will only enter in wiki, author, title. trigger needs to determine what maximum project_id was and create old_max_proj_id+1 for new project. Also needs to add date=now() and version=1.
-
+t1)because of design, someone MUST specify if they are adding a new project or adding to old project. coder handles that. not db. db will have trigger to have
+proper date and version fields update.
 t2)when someone updates project, you will need to make new row have o)ld_max_version+1 as version. Also, you need to add date=now().  
 
 the way triggers work is, you do some function when something occurs. thus must write function, then trigger for when update into db occurs.
 
 t1)
-CREATE or replace FUNCTION proper_add_new_project() returns table( title varchar, author varchar,wiki varchar) AS $$ 
+CREATE or replace FUNCTION proper_add() RETURNS trigger AS $proper_add$
+DECLARE
+    v integer;
 BEGIN
-	return query select get_title($1,$2) as title, get_author($1,$2) as author, get_wiki($1,$2) as wiki;
-END; $$
+    select max(version) into v from osf_timeline where project_id=NEW.project_id;
+    update osf_timeline set date=now(), version= v+1 where id=NEW.id;
+
+    return NEW;
+END; $proper_add$
 LANGUAGE plpgsql;
+
+DROP trigger add_project_properly on osf_timeline;
+CREATE TRIGGER add_project_properly
+after insert
+on osf_timeline
+for each row
+execute procedure proper_add();
+
+
+--check using
+--insert into osf_timeline (title, author, wiki, project_id) values ('t1','a1','w1',2);
