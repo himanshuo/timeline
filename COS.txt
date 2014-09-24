@@ -1,0 +1,440 @@
+
+must lock both tables at same time
+
+
+django 
+
+
+
+mini mock up of 
+
+
+**mock up api
+how easy to get into django
+how to develop rest in this
+permission modle
+tornado wtith django? easy? hard?
+BIG:FULL versioning.
+project has basic attributes: title, wiki, contributors. 
+?date=  
+
+flowdoc
+screen hero
+
+
+Plan:
+1)make database of "projects": contains title, user, wiki, date created, most recent update - DETERMINE WHICH DATABASE BASED ON SOME RESEARCH ON ROW/COLUMN/SPACE LIMITS
+2)make django rest endpoints for accessing and posting data to "projects"
+3)log how difficult it is to work with django rest. report issues, problems
+4)report "permission model" for django? what is that? ask at that point.
+5)implement FULL VERSIONING: allow you to see timeline of project database.
+	1)3 ways to implement differences over time in database :
+		1)easy: add diff column which will be a json of time:(obj_id:val)
+		2)medium: copied table with one extra column representing date. will have too many columns. try in whatever db you are doing rest of these in, BUT also try in hbase or some other columnar db. understand and report on this. NOTE: copied table will ONLY have same schema. Not all values are copied. Only values that are changed from original are copied, rest are NULL.(think about what happens from 1st to 2nd to 3rd version of project. for example, say 2nd has a lot of changes. someone calls 3rd version. the 3rd version should show you what happens for 2nd version along with 3rd version meaning we will have to traverse db until field is not null.) (perhaps some internal db script to add values in copied table) 
+		3)hard: map each row of regular db to a table of differences.(perhaps some internal db script to update values in differences table) regular table will have foreign key to row in differences table. differences table will have blob of differences based on date <- sort of same thing as 1) but in a diff table so as to keep things seperate and smarter.  
+	2) for each, understand issues with scaling, future development, migrations
+	3) develop way to allow you to easily see older versions of database. want to call same regular database functions but with only small difference
+		1)perhaps use decorators to set up custom date in query?  - @time[1995:20:10]
+		2)perhaps can override regular function and allow someone to add an extra date parameter so that the query calls using the appropriate date. someone can also call regular way if they need to.
+		3)perhaps can think of some other way to do this?
+		NOTE: ways to implement this internally:
+			1) change query
+			2) for each returned object, do another internal search for previous version of object.
+			3) ?? another way??? think of some. perhaps google around. can make best version for this. 
+	4)report on how easy is it do each in django.
+	5)implement rest endpoints to see project at various times
+	6)implement view to easily see project at diff times.
+
+
+
+Notes per step:
+1) using postgresql. Space is not an issue. If something goes wrong, its best to have entire project stored for versions. THUS will use "medium" difficulty step. (explained in full in step 3) Easy to create/install, especially on localhost. for now, I will not add date created and recent update columns just to learn/see how easy it is to update my schema in this db and other db. For project column, text type can be used. they are compressed by db. they are stored in background table so accessing them does not interfere with accessing others. MEANING that since we index second db, there is little performance hit. MAXIMUM SIZE IS 1GB FOR TEXT TYPE!
+schema: create table osf(
+id  serial PRIMARY KEY,
+title char(500) not null,
+user char(500) not null,
+wiki text 
+)
+2) easy to install. browsble-api is feature that creates api documentation for you. fairly long documentation. if you go through it and understand and then you can set up simple set of steps for beginner. by default django rest supports sqlite3 - will lead to config issues at first. note that pycharm project and django app must be named diff. in my case, app is osf and project is called timeline. i tried setting up db first; no point in doing so. Django has its own way of setting up db. dont bother. You just create model with appropriate fields and django will handle creating table. It automatically creates id field. can define class Meta inside model. Meta stands for metadata and will basically allow you to customize your database in numerous ways (order by, name, how much should django handle it(not sure if you can make it so that django does not touch it at all), index). for later on, I did see that you can define foreign key in a model.:) if you remove a class from models, django will delete it and things it links to via forgeign key. it will also appropriately add new class as table. note that each table is called appname_modelname. After creating models, must create serializers to easily access/display data. It turns model objects into json and back. It solves the problem I had with c# json.net and turning any random json value that you get into a usable object. Django has this neat little thing called widgets. Basically, you pass them in as arguments to serializer class and it handles any html element created using the data item properly.
+	this whole serializer thing can go all the way from creating a model class and using it like a regular class - change obj's fields like any other obj. Then you can save the obj and it stores the obj in the db. Then you can serialize the class. anyways, you can take the serialized data and render it as json.im guessing this is what the data that comes back from the db looks like. If anything, it certainly is how you get/post data. THEN to deserialize the data, you have to just use a json parser. This is the real thing that c#'s json.net had issues with.
+	very important to note, this entire process is sped up using ModelSerializer class. :)
+FIRST ISSUE: model permissions! i dont know what the issue is. telling me "Cannot apply DjangoModelPermissions on a view that does not have `.model` or `.queryset` property." which means .model or queryset properties not set. what are properties in django? queryset is when you ask for say Person, you will get Person. not MyPerson or anything other object. Only Person. sort of brings into next step which is permission model
+3)note there is a doc specifically on permissions. Permission model is Django's way of allowing only specific users to access API. "authentication" and "throttling" determine whether a request should be granted or denied. permission checks run at the start of the view, before any other code is processed. usually uses the auth info in request.user and request.auth properties. Permissions are defined as list of permission classes. (currently using permission_classes = (AllowAny,) and also used IsAuthenticated ) when the view opens, each of the things in this list are checked. if any are false, then excetion for website.
+object level permissions - determine if user should be allowed to work with certain object (usually model). Object level permissions run by REST frameworks generic views when .get_object() is called. so the REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    )
+} is used for the entire application. and then you can also go a per view by view basis using APIView class:
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+class ExampleView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, format=None):
+        content = {
+            'status': 'request was permitted'
+        }
+        return Response(content)
+key here is the "permission_classes = (IsAuthenticated)" I am going to mix and match. expected is that if top level is view any and view version is IsAuthenticated then wont show. lets see... work? NO! why? because the permission_classes=(IsAuthenticated,) is for when you have a class. It is the class way of extending APIView. The other way, and the way that I am doing this is by using normal django syntax but just using a decorator to enhance it and make it have appropriate REST functionality. thus use @permission_classes((IsAuthenticated,)) :) You will be doing something similar. THUS! know that there are two ways to both create view definitions - the method way where you just use a decorator OR the class way. Both use the APIView class but in diff ways. And thus there are also two ways to handle permission models. for 1, you use the decorator. for 2, you override the variable in the the extended version of APIView
+MORE about permissions: diff permissions include AllowAny, IsAuthenticated, IsAdminUser(deny access to everyone unless user.is_staff=True)
+
+
+scaling diff db, casandra, mongo, riak, postgre
+
+
+
+
+plan for now is:
+project table for most recent. 2 other tables (or 1). 1 for entire 
+
+foundationdb
+
+current model: sparse table
+start from specific older date. move backwards in time until you get a non-null value. At night, we will do this for all tables and move up a olderdate value to a newerdate (newerdate would go backwards in time until it found this value). full and spare rows used.
+
+
+
+
+ideas: 
+use function within case query:
+case query - select id, 
+		case when title=null then 
+					select title from ,
+		else title
+postgres function
+select get_title(id, version), get_wiki(id, version) from hist_table where version = 1.2
+create function get_title(id integer, version integer) RETURNS varchar
+    Begin
+         loop
+		select title in hist_table where version=x
+		if title = null then 
+			x = x-1
+		else
+			return;
+	 end loop;
+    End; 
+
+
+function based indexing
+table index
+heiarchical query
+
+transactional schema:
+
+
+
+
+
+
+
+
+
+CREATE FUNCTION get_title(v int)
+RETURNS varchar AS $$
+BEGIN
+	select title from history where version=v	
+	CASE title=null THEN
+		return get_title(v-1)
+	ELSE
+		return
+END; $$
+LANGUAGE plpgsql;
+
+
+CREATE FUNCTION get_title(v int) RETURNS varchar AS $$ BEGIN select title from history where version=v CASE title=null THEN return get_title(v-1) ELSE return END;
+
+
+
+
+CREATE FUNCTION get_title(v integer) RETURNS varchar AS $$
+BEGIN
+declare cur_title varchar;
+select title INTO cur_title from history where version=v; 
+CASE when cur_title=null THEN
+return get_title(v-1);
+ELSE
+return cur_title;
+end; $$
+language plpgsql;
+
+
+CREATE FUNCTION get_title(v integer) RETURNS varchar AS $$
+BEGIN
+select title from history where version=v; 
+CASE when title=null THEN
+return get_title(v-1);
+ELSE
+return title;
+end
+end; $$
+language plpgsql;
+
+CREATE FUNCTION get_title(v integer) RETURNS varchar AS $$
+BEGIN
+	select CASE when title=null THEN
+		return get_title(v-1);
+	ELSE
+		return title;
+	END 
+	from history where version=v; 
+	
+end; $$
+language plpgsql;
+
+
+
+create function get_title(v integer) returns varchar AS $$
+BEGIN
+	
+	FOR r in SELECT title FROM history WHERE version<v ORDER BY version DESC title=null
+	LOOP 
+		IF r=NULL THEN
+			RETURN NEXT r;
+		ELSE
+			RETURN r; 
+	END LOOP;
+	RETURN;
+END; $$
+language plpgsql;
+
+
+
+create or replace function get_title(v integer) returns varchar AS $$
+DECLARE
+r character varying(255);
+BEGIN
+	
+	FOR i IN REVERSE v..1 LOOP
+		select title INTO r from history where version=i;		
+		IF r IS NOT NULL OR r='' THEN
+			RETURN r;
+		END IF;
+	END LOOP;
+END; $$
+language plpgsql;
+
+
+
+--CURRENT WORKING ONE!!!!
+--improvements: params should be data and id. then use
+--select max(version) into max_version from history where id=id and date=date
+--then you will basically replace v with max_version.
+create or replace function get_wiki(v integer) returns varchar AS $$
+DECLARE
+r character varying(255);
+BEGIN
+	
+	FOR i IN REVERSE v..1 LOOP
+		select wiki INTO r from history where version=i;		
+		IF r IS NOT NULL OR r='' THEN
+			RETURN r;
+		END IF;
+	END LOOP;
+END; $$
+language plpgsql;
+
+
+select title from history where version<5 order by DESC AND title IS NOT NULL
+NOTE: there is a verision in idea notebook for normalized version!!! put in report?
+
+
+
+LAZY QuerySets in Django. I suppose this is what is referred to whenever you hear the phrase lazy "x". Lazy quersets are basically in django code, you write 
+q1 = Entry.objects.all()
+q2 = q1.exclude(pub_date=datetime.date.today())
+q3 = q2.filter(pub_date<= datetime(2005,1,30))
+print(q)
+DJANGO WILL NOT EVALUATE ALL QUERIES! It will basically just wait until all the filters and everything are done. then, when it finally needs the query to actually run, Django will the COMPLETE query. 
+
+you can use F() to refer to value within query in a query condition. for example, you want to get all items where item.value>item.value2. same item, two diff fields. want only when one field is some relative condition to other.
+Entry.objects.filter(authors__name=F('blog__name')) <- "where blog.authorname=blog.blogname"
+
+
+UPDATED ALL FUNCTIONS TO WORK WITH osf_timeline!!!! + the improvements mentioned above.
+--wiki
+create or replace function get_wiki(pid integer, v integer) returns varchar AS $$
+DECLARE
+curr_wiki character varying(255);
+curr_version character varying(255);
+BEGIN
+	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE version<=v AND project_id=pid; 
+	FOR i IN REVERSE curr_version..1 LOOP
+		select wiki INTO curr_wiki from osf_timeline where version=i AND project_id=pid;		
+		IF curr_wiki IS NOT NULL THEN
+			RETURN curr_wiki;
+		END IF;
+	END LOOP;
+END; $$
+language plpgsql;
+--title
+create or replace function get_title(pid integer, v integer) returns varchar AS $$
+DECLARE
+curr_title character varying(255);
+curr_version character varying(255);
+BEGIN
+	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE version<=v AND project_id=pid; 
+	FOR i IN REVERSE curr_version..1 LOOP
+		select title INTO curr_title from osf_timeline where version=i AND project_id=pid;		
+		IF curr_title IS NOT NULL THEN
+			RETURN curr_title;
+		END IF;
+	END LOOP;
+END; $$
+language plpgsql;
+--author
+create or replace function get_author(pid integer, v integer) returns varchar AS $$
+DECLARE
+curr_author character varying(255);
+curr_version character varying(255);
+BEGIN
+	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE version<=v AND project_id=pid; 
+	FOR i IN REVERSE curr_version..1 LOOP
+		select author INTO curr_author from osf_timeline where version=i AND project_id=pid;		
+		IF curr_author IS NOT NULL THEN
+			RETURN curr_author;
+		END IF;
+	END LOOP;
+END; $$
+language plpgsql;
+--get all of the values into one object
+CREATE or replace FUNCTION get_historical_timeline(pid integer, v integer) returns table( title varchar, author varchar,wiki varchar) AS $$ 
+BEGIN
+	return query select get_title($1,$2) as title, get_author($1,$2) as author, get_wiki($1,$2) as wiki;
+END; $$
+LANGUAGE plpgsql;
+--TO RUN, USE: select f.title, f.author, f.wiki from get_historical_timeline(1,5) as f;
+
+
+NOT SURE WHAT METHOD TO OVERRIDE/make decorator for to override. nevermind. you can just take in the entire timeline.objects.all() method as param for decorator and just not execute any of it. but then you need to figure out what object contains.
+
+
+NOTE: this is potential query to be used. result is same as custom function. perhaps make a view with the appropriate timeline fields and then populate it with diff version of this query for each field.
+select osf_timeline.wiki from osf_timeline where version<=5 and project_id=1 and wiki is not null order by version desc limit 1;
+
+
+
+NOTE: a really useful django tool is migrate. use it via python manage.py migrate. MUST BE IN DJANGO 1.7. supported both by django and django-rest and pythong and everything.
+
+
+things left to do: 
+//1)decorators to make accessing data easier. 
+//2)make return data match with model. 
+:)3)create parameters for rest endpoints to allow for easy access.
+4)test speed of db function with sample data.
+5)report
+6)likely will have to benchmark this afterwards.
+7)trigger to update osf_timeline when most updated version 
+
+
+
+
+
+ALTERNATE VERSION USING TIMESTAMP
+--wiki
+create or replace function get_wiki(pid integer, d timestamp) returns varchar AS $$
+DECLARE
+curr_wiki character varying(255);
+curr_version character varying(255);
+BEGIN
+	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE date<=d + interval '1 day' AND project_id=pid; 
+	FOR i IN REVERSE curr_version..1 LOOP
+		select wiki INTO curr_wiki from osf_timeline where version=i AND project_id=pid;		
+		IF curr_wiki IS NOT NULL THEN
+			RETURN curr_wiki;
+		END IF;
+	END LOOP;
+END; $$
+language plpgsql;
+--title
+create or replace function get_title(pid integer, d timestamp) returns varchar AS $$
+DECLARE
+curr_title character varying(255);
+curr_version character varying(255);
+BEGIN
+	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE date<=d + interval '1 day' AND project_id=pid; 
+	FOR i IN REVERSE curr_version..1 LOOP
+		select title INTO curr_title from osf_timeline where version=i AND project_id=pid;		
+		IF curr_title IS NOT NULL THEN
+			RETURN curr_title;
+		END IF;
+	END LOOP;
+END; $$
+language plpgsql;
+--author
+create or replace function get_author(pid integer, d timestamp) returns varchar AS $$
+DECLARE
+curr_author character varying(255);
+curr_version character varying(255);
+BEGIN
+	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE date<=d + interval '1 day' AND project_id=pid; 
+	FOR i IN REVERSE curr_version..1 LOOP
+		select author INTO curr_author from osf_timeline where version=i AND project_id=pid;		
+		IF curr_author IS NOT NULL THEN
+			RETURN curr_author;
+		END IF;
+	END LOOP;
+END; $$
+language plpgsql;
+--get all of the values into one object
+CREATE or replace FUNCTION get_historical_timeline(pid integer, d timestamp) returns table( title varchar, author varchar,wiki varchar) AS $$ 
+BEGIN
+	return query select get_title($1,$2) as title, get_author($1,$2) as author, get_wiki($1,$2) as wiki;
+END; $$
+LANGUAGE plpgsql;
+--TO RUN, USE: select f.title, f.author, f.wiki from get_historical_timeline(1,'2014-9-22'::timestamp) as f;
+
+
+
+
+
+things to test:
+create projects, edit projects, view current, view old, something before 1st time
+n projects
+nprojects x m edits
+view for n projects
+view diff n proj x n diff x distance x sparsity
+
+for each of 100,1000,10000 projects
+	test 10 edits, 100, 1000 edits
+	view current based on projects
+	view diff based on edits+projects(all combinations of 100-10,100-100,100-1000,1000-10...)
+50% chance of adding to wiki and 50% chance of each. thus in 100 projects, 50 edits to title and 50 to title.
+run bash script in django command line interface
+
+
+test this for postgres, mongo, hybrid of both (current in postgres and mongo for historical ) and hbase
+
+bees with machineguns??????????? it is a python/command line script to basically send TONS of requests to a website. it will break website. don't point to non-localhost else it will break website. :) cool 
+
+steps for benchmarking:
+1)create seperate rest endpoints for each db
+2)figure out how you can easily call each db. dict of "localhost:5000" for mongo, "localhost:8888" for postgre...
+3)figure out how to create same structure for mongodb
+4)figure out how to work with mongodb to get same results for historical
+5)also have a hybrid solution
+6)figure out how to input large amounts of data into each db. NOTE: one of the tests is to create. so you can use that instead of data-creation website.
+7)hbase it up. same stuff as above. 
+7)script to call each endpoint some number of times with varying parameters
+	
+in detail:
+1)
+I will have 4 different python projects. Each will contains its own version of 
+
+def create_new_project(wiki, title, author)
+def project_details(date="")#handles both getting current and historical version of project
+def update_project(wiki="", title="",author="") #handles POSTing new data to project. EACH DB will have its own functions within it to handle what happens when someone adds a new version of project. In postgres, insert wiki=asdf, projectid=x into osf_timelines will lead to a trigger than will make this inserted update-to-the-project have an appropriate version number.
+     
+t1)when someone creates a new project, you will only enter in wiki, author, title. trigger needs to determine what maximum project_id was and create old_max_proj_id+1 for new project. Also needs to add date=now() and version=1.
+
+t2)when someone updates project, you will need to make new row have o)ld_max_version+1 as version. Also, you need to add date=now().  
+
+the way triggers work is, you do some function when something occurs. thus must write function, then trigger for when update into db occurs.
+
+t1)
+CREATE or replace FUNCTION proper_add_new_project() returns table( title varchar, author varchar,wiki varchar) AS $$ 
+BEGIN
+	return query select get_title($1,$2) as title, get_author($1,$2) as author, get_wiki($1,$2) as wiki;
+END; $$
+LANGUAGE plpgsql;
