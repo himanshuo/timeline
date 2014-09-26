@@ -454,3 +454,14 @@ execute procedure proper_add();
 
 --check using
 --insert into osf_timeline (title, author, wiki, project_id) values ('t1','a1','w1',2);
+//use curl curl http://localhost:8000/project_detail/?project_id=1&date=12-20-2013
+//curl --data "csrfmiddlewaretoken=QX4YKZLbWnYH6RGBdcEqe6CezwHlLej1&_content_type=application%2Fx-www-form-urlencoded&_content=title%3Dt1%26author%3Da1%26wiki%3Da1%26project_id%3D4" http://localhost:8000/create_new_project/
+
+NOTE: django takes in parameters a little different in POST requests so must use a version of the below two curl lines for create_new_project and update_project
+
+curl --data "csrfmiddlewaretoken=QX4YKZLbWnYH6RGBdcEqe6CezwHlLej1&_content_type=application%2Fx-www-form-urlencoded&_content=title%3Dt1%26author%3Da1%26wiki%3Dw1%26project_id%3D3" http://localhost:8000/create_new_project/
+curl --data "csrfmiddlewaretoken=QX4YKZLbWnYH6RGBdcEqe6CezwHlLej1&_content_type=application%2Fx-www-form-urlencoded&_content=author%3Da2%26wiki%3Dw2%26project_id%3D3" http://localhost:8000/update_project/
+
+
+ISSUE: project_id is handled OUTSIDE of db.
+ANOTHER ISSUE: db doesnt know whether to NOT accept a request for a new project

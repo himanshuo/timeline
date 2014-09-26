@@ -153,18 +153,38 @@ def timeline_detail(request, pk, format=None):
     cursor.execute(sql_cmd)
     return Response(cursor.fetchone())
 """
+
+def proper_creation_request(data):
+    if 'wiki' not in data or not data['wiki']:
+        return False;
+    if 'title' not in data or not data['title']:
+        return False;
+    if 'author' not in data or not data['author']:
+        return False;
+    return True
+
+#{"wiki":"w1", "title":"t1", "author":"a1", "project_id": 3}
+@csrf_exempt
 @api_view(['POST'])
 def create_new_project(request, format=None):
 
     if request.method == 'POST':
-        serializer = TimelineSerializer(data=request.DATA)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        print str(request.DATA)
+        if 'project_id' not in request.DATA or not request.DATA['project_id']:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        if not proper_creation_request(request.DATA):
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        #serializer = TimelineSerializer(data=request.DATA)
+        #if serializer.is_valid():
+        #    serializer.save()
+        cursor = connection.cursor()
+        sql_cmd = "insert into osf_timeline (title, author, wiki, project_id) values (\'{}\',\'{}\',\'{}\',{});".format(request.DATA['title'],request.DATA['author'],request.DATA['wiki'],int(request.DATA['project_id']))
+        #if cursor.execute(sql_cmd, (request.DATA['title'],request.DATA['author'],request.DATA['wiki'],int(request.DATA['project_id'])) ):
+        #    return Response( status=status.HTTP_201_CREATED)
+        return Response(cursor.execute(sql_cmd), status=status.HTTP_201_CREATED)
     return Response(status=status.HTTP_400_BAD_REQUEST)
 
-
+@csrf_exempt
 @api_view(['GET'])
 def project_detail(request, format=None):
 
@@ -173,22 +193,46 @@ def project_detail(request, format=None):
         d = date.today()
         if 'date' in request.GET and request.GET['date']:
             url_date = request.GET['date'].split("-")
-            d=date(month=int(url_date[0]), day=int(url_date[1]),year=int(url_date[2])) # format is to have
+            d=date(month=int(url_date[0]), day=int(url_date[1]),year=int(url_date[2])) # 09-20-2014
         if 'project_id' not in request.GET or not request.GET['project_id']:
             return Response(status=status.HTTP_400_BAD_REQUEST)
         sql_cmd = "select f.title, f.author, f.wiki from get_historical_timeline({},\'{}\'::timestamp) as f".format(int(request.GET['project_id']), d)
+        #sql_cmd = "select f.title, f.author, f.wiki from get_historical_timeline(?, ?::timestamp ) as f"
+        #cursor.execute(sql_cmd, (    int(request.GET['project_id']),     d   )  )
         cursor.execute(sql_cmd)
         return Response(cursor.fetchone())
     return Response(status=status.HTTP_400_BAD_REQUEST)
 
+#SERIOUSLY HARD CODED. BAD.
+def build_query(data):
+    query= "insert into osf_timeline ("
+    for k in data.iterkeys():
+        query = query + k+","
+    query = query[:-1] + ") values("
 
 
-@api_view(['PUT'])
+    for k,v in data.items():
+        if k=='project_id':
+            query = query + str(v)+ ","
+        else :
+            query = query +" '"+ v+"' ,"
+    query = query[:-1] + ");"
+    return query
+#{"wiki":"w1", "title":"t1", "author":"a1", "project_id": 3}
+@csrf_exempt
+@api_view(['POST'])
 def update_project(request):
-    if request.method=="PUT":
-        serializer = TimelineSerializer(data=request.DATA)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    if request.method=="POST":
+        print str(request.DATA)
+        if 'project_id' not in request.DATA or not request.DATA['project_id']:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        cursor = connection.cursor()
+        sql_cmd = build_query(request.DATA)
+        print sql_cmd
+        #sql_cmd = "insert into osf_timeline (title, author, wiki, project_id) values (\'{}\',\'{}\',\'{}\',{});".format(request.DATA['title'],request.DATA['author'],request.DATA['wiki'],int(request.DATA['project_id']))
+        return Response(cursor.execute(sql_cmd), status=status.HTTP_206_PARTIAL_CONTENT)
     return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+#steps to using this are:
+# curl
