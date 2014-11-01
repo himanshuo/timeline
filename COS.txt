@@ -338,9 +338,9 @@ DECLARE
 curr_wiki character varying(255);
 curr_version character varying(255);
 BEGIN
-	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE date<=d + interval '1 day' AND project_id=pid; 
+	SELECT Max(version) INTO curr_version FROM osft_timeline WHERE date<=d + interval '1 day' AND project_id=pid;
 	FOR i IN REVERSE curr_version..1 LOOP
-		select wiki INTO curr_wiki from osf_timeline where version=i AND project_id=pid;		
+		select wiki INTO curr_wiki from osft_timeline where version=i AND project_id=pid;
 		IF curr_wiki IS NOT NULL THEN
 			RETURN curr_wiki;
 		END IF;
@@ -353,9 +353,9 @@ DECLARE
 curr_title character varying(255);
 curr_version character varying(255);
 BEGIN
-	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE date<=d + interval '1 day' AND project_id=pid; 
+	SELECT Max(version) INTO curr_version FROM osft_timeline WHERE date<=d + interval '1 day' AND project_id=pid;
 	FOR i IN REVERSE curr_version..1 LOOP
-		select title INTO curr_title from osf_timeline where version=i AND project_id=pid;		
+		select title INTO curr_title from osft_timeline where version=i AND project_id=pid;
 		IF curr_title IS NOT NULL THEN
 			RETURN curr_title;
 		END IF;
@@ -368,9 +368,9 @@ DECLARE
 curr_author character varying(255);
 curr_version character varying(255);
 BEGIN
-	SELECT Max(version) INTO curr_version FROM osf_timeline WHERE date<=d + interval '1 day' AND project_id=pid; 
+	SELECT Max(version) INTO curr_version FROM osft_timeline WHERE date<=d + interval '1 day' AND project_id=pid;
 	FOR i IN REVERSE curr_version..1 LOOP
-		select author INTO curr_author from osf_timeline where version=i AND project_id=pid;		
+		select author INTO curr_author from osft_timeline where version=i AND project_id=pid;
 		IF curr_author IS NOT NULL THEN
 			RETURN curr_author;
 		END IF;
@@ -437,24 +437,24 @@ CREATE or replace FUNCTION proper_add() RETURNS trigger AS $proper_add$
 DECLARE
     v integer;
 BEGIN
-    select max(version) into v from osf_timeline where project_id=NEW.project_id;
-    update osf_timeline set date=now(), version= v+1 where id=NEW.id;
+    select max(version) into v from osft_timeline where project_id=NEW.project_id;
+    update osft_timeline set date=now(), version= v+1 where id=NEW.id;
 
     return NEW;
 END; $proper_add$
 LANGUAGE plpgsql;
 
-DROP trigger add_project_properly on osf_timeline;
+DROP trigger add_project_properly on osft_timeline;
 CREATE TRIGGER add_project_properly
 after insert
-on osf_timeline
+on osft_timeline
 for each row
 execute procedure proper_add();
 
 
 --check using
---insert into osf_timeline (title, author, wiki, project_id) values ('t1','a1','w1',2);
-//use curl curl http://localhost:8000/project_detail/?project_id=1&date=12-20-2013
+--insert into osft_timeline (title, author, wiki, project_id) values ('t1','a1','w1',2);
+//use curl: curl http://localhost:8000/project_detail/?project_id=1&date=12-20-2013
 //curl --data "csrfmiddlewaretoken=QX4YKZLbWnYH6RGBdcEqe6CezwHlLej1&_content_type=application%2Fx-www-form-urlencoded&_content=title%3Dt1%26author%3Da1%26wiki%3Da1%26project_id%3D4" http://localhost:8000/create_new_project/
 
 NOTE: django takes in parameters a little different in POST requests so must use a version of the below two curl lines for create_new_project and update_project
@@ -465,3 +465,11 @@ curl --data "csrfmiddlewaretoken=QX4YKZLbWnYH6RGBdcEqe6CezwHlLej1&_content_type=
 
 ISSUE: project_id is handled OUTSIDE of db.
 ANOTHER ISSUE: db doesnt know whether to NOT accept a request for a new project
+
+
+TO CHANGE PORTS::::::::   python manage.py runserver 127.0.0.1:8002
+
+
+
+
+FOR mongodb, you were using mongodb engine. DONT. IT is NOT complete. Instead, use mongoengine.
